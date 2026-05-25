@@ -1,0 +1,82 @@
+# =============================================================================
+# Sistema Preditivo de Gargalos Portuários — Vidal Transportes
+# =============================================================================
+# Como usar:
+#   1. Copie .env.exemplo para .env  →  cp .env.exemplo .env
+#   2. Suba tudo:                    →  docker compose up --build
+#   3. Acesse a API:                 →  http://localhost:8000/docs
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Banco de dados PostgreSQL
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: vidal_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-vidal_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vidal_senha_segura}
+      POSTGRES_DB:       ${POSTGRES_DB:-vidal_portos}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"          # Expõe para acesso externo (ex.: DBeaver, pgAdmin)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vidal_user} -d ${POSTGRES_DB:-vidal_portos}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # Aplicação principal (Fases 1 + 2 + 3)
+  # ---------------------------------------------------------------------------
+  app:
+    build: .
+    container_name: vidal_app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Banco principal
+      DB_URL: postgresql://${POSTGRES_USER:-vidal_user}:${POSTGRES_PASSWORD:-vidal_senha_segura}@postgres:5432/${POSTGRES_DB:-vidal_portos}
+
+      # Banco de telemetria da frota (aponta para o mesmo banco em modo demo)
+      DB_FROTA_URL: postgresql://${POSTGRES_USER:-vidal_user}:${POSTGRES_PASSWORD:-vidal_senha_segura}@postgres:5432/${POSTGRES_DB:-vidal_portos}
+
+      # API de clima (opcional — sem ela usa dados sintéticos)
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
+
+      # Chave de autenticação da API REST
+      API_SECRET_KEY: ${API_SECRET_KEY:-vidal-demo-key-2025}
+
+      # Webhook de alertas (opcional — Slack ou Teams)
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+
+      # Controla se o entrypoint vai treinar os modelos no boot
+      TREINAR_MODELOS: ${TREINAR_MODELOS:-true}
+
+      # Portos para treinar no boot (separados por vírgula)
+      # Opções: paranagua, santos, rio_grande, itajai, sao_francisco_sul,
+      #         rio_de_janeiro, vitoria, suape, fortaleza, itaqui,
+      #         vila_do_conde, santarem, rondonopolis, ponta_grossa
+      PORTOS_TREINAR: ${PORTOS_TREINAR:-paranagua,santos,rio_grande,itajai,sao_francisco_sul,rio_de_janeiro,vitoria,suape,fortaleza,itaqui,vila_do_conde,santarem,rondonopolis,ponta_grossa}
+
+    volumes:
+      # Persiste os modelos treinados entre restarts
+      - modelos_salvos:/app/modelos_salvos
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s    # Dá tempo para treinar os modelos no primeiro boot
+
+volumes:
+  postgres_data:
+  modelos_salvos:
