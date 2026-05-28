@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transvidal — Sistema Preditivo de Gargalos Portuários</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+/* ─── DESIGN TOKENS — idênticos ao dashboard.html ───────────────────────── */
+:root {
+  --transvidal-red:       #D32F2F;
+  --transvidal-red-dark:  #A71C1C;
+  --transvidal-gray-dark: #333333;
+  --transvidal-gray-mid:  #555555;
+  --transvidal-gray-light:#E0E0E0;
+  --transvidal-white:     #FFFFFF;
+  --transvidal-bg-light:  #F5F5F5;
+  --status-ok:   #27ae60;
+  --status-warn: #f39c12;
+  --status-crit: #D32F2F;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{background:var(--transvidal-bg-light);color:var(--transvidal-gray-dark);font-family:'Roboto',sans-serif;overflow-x:hidden;}
+
+/* ─── COMPONENTES IDÊNTICOS AO DASHBOARD ────────────────────────────────── */
+/* header reutilizado como navbar fixo */
+header{
+  position:fixed;top:0;left:0;right:0;z-index:9999;
+  background:var(--transvidal-white);
+  padding:.9rem 2rem;
+  display:flex;justify-content:space-between;align-items:center;
+  border-bottom:4px solid var(--transvidal-red);
+  box-shadow:0 4px 6px rgba(0,0,0,.1);
+}
+.logo-area{display:flex;align-items:center;gap:20px;}
+.logo-img{height:45px;border-radius:4px;object-fit:contain;}
+.system-title{border-left:2px solid var(--transvidal-gray-light);padding-left:20px;}
+.system-title h1{font-size:1.1rem;font-weight:700;color:var(--transvidal-gray-dark);}
+.system-title p{font-size:.8rem;color:var(--transvidal-gray-mid);text-transform:uppercase;}
+.nav-links{display:flex;gap:1.6rem;align-items:center;}
+.nav-links a{font-size:.78rem;font-weight:700;text-transform:uppercase;color:var(--transvidal-gray-mid);text-decoration:none;letter-spacing:.4px;transition:color .2s;}
+.nav-links a:hover{color:var(--transvidal-red);}
+.nav-cta{background:var(--transvidal-red)!important;color:#fff!important;padding:.55rem 1.3rem;border-radius:3px;}
+.nav-cta:hover{background:var(--transvidal-red-dark)!important;}
+@media(max-width:860px){.nav-links{display:none;}}
+
+/* .panel — 100% igual ao dashboard */
+.panel{
+  background:var(--transvidal-white);border-radius:4px;padding:20px;
+  border:1px solid var(--transvidal-gray-light);
+  box-shadow:0 2px 4px rgba(0,0,0,.05);
+}
+h2{
+  font-size:1rem;text-transform:uppercase;margin-bottom:16px;
+  color:var(--transvidal-red);border-bottom:2px solid var(--transvidal-gray-light);
+  padding-bottom:10px;display:flex;justify-content:space-between;align-items:center;
+}
+h2 small{color:var(--transvidal-gray-mid);font-weight:400;font-size:.8rem;}
+
+/* porto-card — 100% igual */
+.porto-card{
+  background:var(--transvidal-white);padding:15px;border-radius:4px;
+  margin-bottom:12px;border:1px solid var(--transvidal-gray-light);
+  border-left:5px solid var(--transvidal-gray-mid);
+  transition:.3s;cursor:pointer;
+}
+.porto-card:hover{border-color:var(--transvidal-red);background:var(--transvidal-bg-light);transform:translateX(5px);}
+.porto-card.status-ok  {border-left-color:var(--status-ok);}
+.porto-card.status-warn{border-left-color:var(--status-warn);}
+.porto-card.status-crit{border-left-color:var(--status-crit);}
+.porto-header{display:flex;justify-content:space-between;margin-bottom:10px;align-items:center;}
+.porto-name{font-weight:700;font-size:.95rem;color:var(--transvidal-gray-dark);}
+.wait-time{font-family:'Roboto Mono',monospace;font-weight:700;font-size:1.1rem;color:var(--transvidal-gray-dark);}
+.wait-unit{font-size:.8rem;color:var(--transvidal-gray-mid);}
+.predicao-info{font-size:.8rem;color:var(--transvidal-gray-mid);font-weight:500;}
+.trend-icon{font-weight:900;margin-right:5px;}
+.perfil-op{margin-top:10px;padding-top:8px;border-top:1px dashed var(--transvidal-gray-light);font-size:.75rem;color:var(--transvidal-gray-mid);line-height:1.5;}
+.perfil-label{font-weight:700;color:var(--transvidal-gray-dark);text-transform:uppercase;font-size:.65rem;letter-spacing:.5px;margin-right:4px;}
+
+/* badge — igual */
+.badge{display:inline-block;padding:3px 8px;border-radius:3px;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
+.badge-ok {background:rgba(39,174,96,.15);color:var(--status-ok);}
+.badge-off{background:rgba(211,47,47,.12);color:var(--status-crit);}
+
+/* br-badge — igual */
+.br-badge{background:#004a2f;color:#fff;padding:3px 8px;border-radius:4px;font-weight:700;font-size:.8rem;border:2px solid #fff;box-shadow:0 2px 2px rgba(0,0,0,.2);}
+.br-item{padding:12px 0;border-bottom:1px solid var(--transvidal-gray-light);display:flex;align-items:center;gap:15px;}
+.br-info{flex:1;}
+.br-nome{font-size:.9rem;font-weight:500;}
+.br-status-desc{font-size:.75rem;color:var(--transvidal-gray-mid);}
+.status-dot{height:10px;width:10px;border-radius:50%;}
+
+/* tabs — igual */
+.tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid var(--transvidal-gray-light);}
+.tab-btn{background:transparent;border:none;padding:10px 14px;cursor:pointer;font-family:inherit;font-size:.78rem;font-weight:700;text-transform:uppercase;color:var(--transvidal-gray-mid);border-bottom:3px solid transparent;margin-bottom:-2px;transition:.2s;}
+.tab-btn:hover{color:var(--transvidal-gray-dark);}
+.tab-btn.active{color:var(--transvidal-red);border-bottom-color:var(--transvidal-red);}
+.tab-pane{display:none;}
+.tab-pane.active{display:block;}
+
+/* modelos table — igual */
+.modelos-resumo{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;}
+.resumo-card{background:var(--transvidal-bg-light);border-radius:4px;padding:10px 8px;text-align:center;}
+.resumo-num{font-family:'Roboto Mono',monospace;font-size:1.4rem;font-weight:700;color:var(--transvidal-gray-dark);line-height:1;}
+.resumo-label{font-size:.65rem;text-transform:uppercase;color:var(--transvidal-gray-mid);margin-top:4px;font-weight:700;}
+.modelos-table{width:100%;border-collapse:collapse;font-size:.82rem;}
+.modelos-table th{text-align:left;padding:8px 6px;background:var(--transvidal-bg-light);color:var(--transvidal-gray-mid);text-transform:uppercase;font-size:.7rem;font-weight:700;border-bottom:1px solid var(--transvidal-gray-light);}
+.modelos-table td{padding:10px 6px;border-bottom:1px solid var(--transvidal-gray-light);vertical-align:middle;}
+.modelos-table tr:hover td{background:var(--transvidal-bg-light);}
+.modelo-porto{font-weight:700;color:var(--transvidal-gray-dark);}
+.modelo-mae{font-family:'Roboto Mono',monospace;font-weight:700;}
+
+/* leaflet popup — igual */
+.leaflet-popup-content-wrapper{background:var(--transvidal-gray-dark)!important;color:var(--transvidal-white)!important;border-radius:2px!important;}
+.leaflet-popup-tip{background:var(--transvidal-gray-dark)!important;}
+
+/* scrollbar — igual */
+::-webkit-scrollbar{width:6px;}
+::-webkit-scrollbar-track{background:var(--transvidal-bg-light);}
+::-webkit-scrollbar-thumb{background:var(--transvidal-gray-light);border-radius:3px;}
+::-webkit-scrollbar-thumb:hover{background:var(--transvidal-gray-mid);}
+
+/* ─── SEÇÕES DA LANDING PAGE ─────────────────────────────────────────────── */
+section{padding:80px 2rem;}
+.lp-inner{max-width:1180px;margin:0 auto;}
+
+/* eyebrow label */
+.lp-label{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:3px;color:var(--transvidal-red);margin-bottom:.7rem;}
+
+/* hero */
+#hero{
+  padding-top:148px;padding-bottom:80px;
+  background:linear-gradient(135deg,#fff 0%,#f5f5f5 55%,#fff5f5 100%);
+  border-bottom:4px solid var(--transvidal-gray-light);
+}
+.hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:3.5rem;align-items:center;}
+@media(max-width:900px){.hero-grid{grid-template-columns:1fr;}}
+
+.live-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(211,47,47,.07);border:1px solid rgba(211,47,47,.2);
+  padding:5px 14px;border-radius:2px;
+  font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--transvidal-red);
+  margin-bottom:1.25rem;
+}
+.live-badge::before{content:'';width:7px;height:7px;background:var(--status-ok);border-radius:50%;animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(1.4);}}
+
+.hero-h1{font-size:2.75rem;font-weight:900;line-height:1.1;color:var(--transvidal-gray-dark);margin-bottom:1.2rem;}
+.hero-h1 span{color:var(--transvidal-red);}
+.hero-sub{font-size:1rem;color:var(--transvidal-gray-mid);line-height:1.8;margin-bottom:2rem;}
+
+.hero-btns{display:flex;gap:.9rem;flex-wrap:wrap;margin-bottom:2.5rem;}
+.btn-red{
+  display:inline-flex;align-items:center;gap:7px;
+  background:var(--transvidal-red);color:#fff;
+  padding:.82rem 1.8rem;border:none;border-radius:3px;
+  font-family:inherit;font-size:.85rem;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
+  cursor:pointer;text-decoration:none;
+  box-shadow:0 4px 12px rgba(211,47,47,.28);transition:all .2s;
+}
+.btn-red:hover{background:var(--transvidal-red-dark);transform:translateY(-1px);box-shadow:0 7px 18px rgba(211,47,47,.34);}
+.btn-ghost{
+  display:inline-flex;align-items:center;gap:7px;
+  background:transparent;color:var(--transvidal-gray-dark);
+  padding:.82rem 1.8rem;border:2px solid var(--transvidal-gray-light);border-radius:3px;
+  font-family:inherit;font-size:.85rem;font-weight:500;
+  cursor:pointer;text-decoration:none;transition:all .2s;
+}
+.btn-ghost:hover{border-color:var(--transvidal-red);color:var(--transvidal-red);}
+
+/* KPI strip (dashboard-style) */
+.kpi-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--transvidal-gray-light);border:1px solid var(--transvidal-gray-light);}
+.kpi{background:var(--transvidal-white);padding:1.2rem 1rem;text-align:center;}
+.kpi-n{font-family:'Roboto Mono',monospace;font-size:1.8rem;font-weight:700;color:var(--transvidal-red);}
+.kpi-l{font-size:.62rem;text-transform:uppercase;letter-spacing:.8px;color:var(--transvidal-gray-mid);margin-top:3px;}
+
+/* mini-dashboard card in hero */
+.hero-dash{border-top:4px solid var(--transvidal-red);}
+.hero-dash-hdr{background:var(--transvidal-bg-light);padding:11px 16px;border-bottom:1px solid var(--transvidal-gray-light);display:flex;justify-content:space-between;align-items:center;}
+.hero-dash-title{font-size:.75rem;font-weight:700;text-transform:uppercase;color:var(--transvidal-gray-mid);}
+.live-pill{display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--status-ok);font-weight:700;}
+.live-pill::before{content:'';width:6px;height:6px;background:var(--status-ok);border-radius:50%;animation:pulse 2s infinite;}
+.mini-ports{padding:10px 14px;}
+.mp-row{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 10px;margin-bottom:5px;border-radius:0 3px 3px 0;
+  border-left:4px solid;background:var(--transvidal-bg-light);
+}
+.mp-row.ok  {border-left-color:var(--status-ok);}
+.mp-row.warn{border-left-color:var(--status-warn);}
+.mp-row.crit{border-left-color:var(--status-crit);}
+.mp-name{flex:1;font-size:.78rem;font-weight:500;color:var(--transvidal-gray-dark);}
+.mp-h{font-family:'Roboto Mono',monospace;font-size:.9rem;font-weight:700;}
+.mp-row.ok   .mp-h{color:var(--status-ok);}
+.mp-row.warn .mp-h{color:var(--status-warn);}
+.mp-row.crit .mp-h{color:var(--status-crit);}
+.mini-chart{padding:0 14px 12px;}
+
+/* dor section */
+#dor{background:var(--transvidal-gray-dark);}
+#dor .lp-label{color:#f87171;}
+.dor-title{font-size:2rem;font-weight:900;color:#fff;line-height:1.2;margin-bottom:1rem;}
+.dor-sub{font-size:1rem;color:#aaa;line-height:1.75;max-width:660px;margin-bottom:3rem;}
+.dor-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;background:rgba(255,255,255,.06);}
+@media(max-width:720px){.dor-grid{grid-template-columns:1fr;}}
+.dor-card{background:#3a3a3a;padding:2rem 1.75rem;border-top:3px solid var(--transvidal-red);transition:background .2s;}
+.dor-card:hover{background:#424242;}
+.dor-icon{font-size:2rem;margin-bottom:1rem;display:block;}
+.dor-card h3{font-size:1rem;font-weight:700;color:#fff;margin-bottom:.75rem;}
+.dor-card p{font-size:.84rem;color:#aaa;line-height:1.7;}
+.dor-cost{margin-top:1.25rem;padding:.6rem 1rem;background:rgba(211,47,47,.1);border-left:3px solid var(--transvidal-red);font-family:'Roboto Mono',monospace;font-size:.78rem;color:#f87171;font-weight:700;}
+
+/* fases */
+#ciencia{background:var(--transvidal-white);}
+.fases-hdr{text-align:center;margin-bottom:3.5rem;}
+.fases-hdr h2{font-size:2rem;font-weight:900;color:var(--transvidal-gray-dark);border:none;display:block;padding:0;margin:0;}
+.fases-hdr p{font-size:.95rem;color:var(--transvidal-gray-mid);line-height:1.75;max-width:640px;margin:.75rem auto 0;}
+.fases-grid{display:grid;grid-template-columns:1fr 28px 1fr 28px 1fr;gap:0;align-items:start;}
+@media(max-width:860px){.fases-grid{grid-template-columns:1fr;} .fase-arrow{display:none;}}
+.fase-arrow{display:flex;align-items:center;justify-content:center;color:var(--transvidal-gray-light);font-size:1.3rem;padding-top:2.5rem;}
+.fase-card{background:var(--transvidal-bg-light);border:1px solid var(--transvidal-gray-light);border-top:3px solid var(--transvidal-red);padding:1.75rem;position:relative;}
+.fase-n{font-family:'Roboto Mono',monospace;font-size:2.6rem;font-weight:700;color:rgba(211,47,47,.1);position:absolute;top:.6rem;right:1.2rem;line-height:1;}
+.fase-lbl{font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--transvidal-red);margin-bottom:.45rem;}
+.fase-title{font-size:1rem;font-weight:700;color:var(--transvidal-gray-dark);margin-bottom:.75rem;}
+.fase-desc{font-size:.82rem;color:var(--transvidal-gray-mid);line-height:1.7;margin-bottom:1.1rem;}
+.fase-tags{display:flex;flex-wrap:wrap;gap:5px;}
+.ftag{background:var(--transvidal-white);border:1px solid var(--transvidal-gray-light);padding:3px 9px;border-radius:2px;font-size:.66rem;color:var(--transvidal-gray-mid);font-family:'Roboto Mono',monospace;}
+
+/* portos */
+#portos{background:var(--transvidal-bg-light);}
+.portos-hdr{margin-bottom:2.5rem;}
+.portos-hdr h2{font-size:1.9rem;font-weight:900;color:var(--transvidal-gray-dark);border:none;display:block;padding:0;margin:.4rem 0 .75rem;}
+.portos-hdr p{font-size:.95rem;color:var(--transvidal-gray-mid);line-height:1.75;max-width:680px;}
+.portos-layout{display:grid;grid-template-columns:320px 1fr;gap:2rem;align-items:start;}
+@media(max-width:860px){.portos-layout{grid-template-columns:1fr;}}
+.porto-list-lp{display:flex;flex-direction:column;gap:3px;}
+.pli{
+  display:flex;align-items:center;gap:12px;padding:11px 13px;
+  background:var(--transvidal-white);border:1px solid var(--transvidal-gray-light);
+  border-left:4px solid var(--status-ok);cursor:pointer;transition:all .2s;
+}
+.pli:hover{border-left-color:var(--transvidal-red);background:var(--transvidal-bg-light);transform:translateX(3px);}
+.pli-dot{width:7px;height:7px;border-radius:50%;background:var(--status-ok);animation:pulse 3s infinite;flex-shrink:0;}
+.pli-name{flex:1;font-size:.8rem;font-weight:500;color:var(--transvidal-gray-dark);}
+.pli-type{font-size:.6rem;font-weight:700;text-transform:uppercase;padding:2px 7px;border-radius:2px;}
+.pli-type.porto{background:rgba(211,47,47,.1);color:var(--transvidal-red);}
+.pli-type.hub{background:rgba(39,174,96,.1);color:var(--status-ok);}
+#lp-map{height:430px;border-radius:3px;border:1px solid var(--transvidal-gray-light);}
+.map-legend{display:flex;gap:1.4rem;margin-top:.65rem;font-size:.72rem;color:var(--transvidal-gray-mid);}
+.ml-i{display:flex;align-items:center;gap:6px;}
+.ml-d{width:8px;height:8px;border-radius:50%;}
+
+/* resultados */
+#resultados{background:var(--transvidal-white);border-top:1px solid var(--transvidal-gray-light);}
+.res-hdr{text-align:center;margin-bottom:3rem;}
+.res-hdr h2{font-size:1.9rem;font-weight:900;color:var(--transvidal-gray-dark);border:none;display:block;padding:0;}
+.res-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;background:var(--transvidal-gray-light);}
+@media(max-width:700px){.res-grid{grid-template-columns:repeat(2,1fr);}}
+.res-card{background:var(--transvidal-white);padding:2.5rem 1.5rem;text-align:center;}
+.res-n{font-family:'Roboto Mono',monospace;font-size:2.4rem;font-weight:700;color:var(--transvidal-red);line-height:1;margin-bottom:.35rem;display:block;}
+.res-l{font-size:.84rem;font-weight:700;color:var(--transvidal-gray-dark);margin-bottom:.35rem;}
+.res-d{font-size:.74rem;color:var(--transvidal-gray-mid);line-height:1.55;}
+
+/* tecnologia */
+#tecnologia{background:var(--transvidal-bg-light);}
+.tech-layout{display:grid;grid-template-columns:1fr 1fr;gap:3.5rem;align-items:center;}
+@media(max-width:860px){.tech-layout{grid-template-columns:1fr;}}
+.tech-hdr h2{font-size:1.75rem;font-weight:900;color:var(--transvidal-gray-dark);border:none;display:block;padding:0;margin:.4rem 0 .85rem;}
+.tech-hdr p{font-size:.9rem;color:var(--transvidal-gray-mid);line-height:1.75;margin-bottom:2rem;}
+.tf{display:flex;gap:1rem;align-items:flex-start;padding:1.1rem;background:var(--transvidal-white);border:1px solid var(--transvidal-gray-light);border-left:4px solid var(--transvidal-red);margin-bottom:.75rem;transition:box-shadow .2s;}
+.tf:hover{box-shadow:0 4px 12px rgba(0,0,0,.07);}
+.tf-i{font-size:1.5rem;flex-shrink:0;width:38px;text-align:center;margin-top:2px;}
+.tf h4{font-size:.88rem;font-weight:700;color:var(--transvidal-gray-dark);margin-bottom:.3rem;}
+.tf p{font-size:.8rem;color:var(--transvidal-gray-mid);line-height:1.6;}
+/* code block */
+.code-block{background:#1e1e1e;border-radius:4px;overflow:hidden;font-family:'Roboto Mono',monospace;font-size:.75rem;box-shadow:0 8px 24px rgba(0,0,0,.14);}
+.code-hdr{background:#2d2d2d;padding:9px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #3d3d3d;font-size:.68rem;color:#888;}
+.code-dots{display:flex;gap:5px;}
+.code-dots span{width:10px;height:10px;border-radius:50%;}
+.code-body{padding:1.35rem;line-height:1.85;color:#ccc;}
+.ck{color:#f48fb1;} .cv{color:#80cbc4;} .cs{color:#a5d6a7;} .cn{color:#ffcc80;} .cc{color:#5a5a5a;}
+
+/* dashboard ao vivo */
+#demo{background:var(--transvidal-white);}
+.demo-hdr{text-align:center;margin-bottom:2.5rem;}
+.demo-hdr h2{font-size:1.9rem;font-weight:900;color:var(--transvidal-gray-dark);border:none;display:block;padding:0;margin:.4rem 0 .75rem;}
+.demo-hdr p{font-size:.95rem;color:var(--transvidal-gray-mid);line-height:1.75;max-width:620px;margin:0 auto;}
+/* reutiliza exatamente o layout do dashboard */
+.dashboard-embed{
+  display:grid;grid-template-columns:360px 1fr 300px;
+  gap:16px;
+}
+@media(max-width:1100px){.dashboard-embed{grid-template-columns:1fr;}}
+.embed-panel{
+  background:var(--transvidal-white);border-radius:4px;
+  border:1px solid var(--transvidal-gray-light);
+  box-shadow:0 2px 4px rgba(0,0,0,.05);
+  overflow:hidden;display:flex;flex-direction:column;
+}
+#demo-lista-portos{overflow-y:auto;max-height:420px;padding:8px 10px;flex:1;}
+#demo-map{height:450px;width:100%;}
+.demo-status-bar{display:flex;gap:16px;font-size:.82rem;color:var(--transvidal-gray-mid);font-weight:500;align-items:center;margin-bottom:1rem;padding:10px 14px;background:var(--transvidal-bg-light);border:1px solid var(--transvidal-gray-light);border-radius:3px;}
+.demo-status-bar span{font-weight:700;color:var(--transvidal-gray-dark);}
+.api-online{color:var(--status-ok)!important;}
+.api-offline{color:var(--status-crit)!important;}
+
+/* cta */
+#cta{background:var(--transvidal-gray-dark);text-align:center;}
+#cta .lp-label{color:#f87171;}
+.cta-title{font-size:2.2rem;font-weight:900;color:#fff;line-height:1.2;margin-bottom:1rem;}
+.cta-sub{font-size:1rem;color:#aaa;line-height:1.75;max-width:640px;margin:0 auto 2.5rem;}
+.cta-form{display:flex;max-width:470px;margin:0 auto .9rem;}
+.cta-input{flex:1;padding:.85rem 1.2rem;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);border-right:none;color:#fff;font-family:inherit;font-size:.85rem;border-radius:3px 0 0 3px;outline:none;}
+.cta-input:focus{border-color:rgba(211,47,47,.45);}
+.cta-input::placeholder{color:#555;}
+.cta-form .btn-red{border-radius:0 3px 3px 0;box-shadow:none;white-space:nowrap;}
+.cta-note{font-size:.72rem;color:#555;}
+
+/* footer */
+footer{background:#222;padding:1.8rem 2rem;border-top:4px solid var(--transvidal-red);}
+.footer-inner{max-width:1180px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1.25rem;}
+.footer-brand{display:flex;align-items:center;gap:14px;}
+.footer-brand img{height:34px;border-radius:3px;opacity:.8;}
+.footer-brand-txt{font-size:.72rem;color:#666;}
+.footer-brand-txt strong{color:#999;display:block;margin-bottom:2px;}
+.footer-links{display:flex;gap:1.6rem;}
+.footer-links a{color:#555;text-decoration:none;font-size:.72rem;transition:color .2s;}
+.footer-links a:hover{color:var(--transvidal-red);}
+.footer-tech{font-size:.65rem;color:#3a3a3a;font-family:'Roboto Mono',monospace;text-align:right;}
+
+/* fade-up animation */
+.fu{opacity:0;transform:translateY(22px);transition:opacity .6s ease,transform .6s ease;}
+.fu.vis{opacity:1;transform:translateY(0);}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ NAVBAR ═══════════ -->
+<header>
+  <div class="logo-area">
+    <img src="data:image/jpeg;base64,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" alt="Transvidal" class="logo-img">
+    <div class="system-title">
+      <h1>Sistema Preditivo Transvidal</h1>
+      <p>Torre de Controle Logística · LSTM · FastAPI · Docker</p>
+    </div>
+  </div>
+  <nav class="nav-links">
+    <a href="#dor">O Problema</a>
+    <a href="#ciencia">Tecnologia</a>
+    <a href="#portos">Cobertura</a>
+    <a href="#demo">Dashboard</a>
+    <a href="#tecnologia">Integração</a>
+    <a href="#contato" class="nav-cta">Contato</a>
+  </nav>
+</header>
+
+<!-- ═══════════ HERO ═══════════ -->
+<section id="hero">
+  <div class="lp-inner hero-grid">
+
+    <!-- Esquerda: copy -->
+    <div class="fu">
+      <div class="live-badge">⚡ Monitoramento Ativo 24/7</div>
+      <h1 class="hero-h1">Zere a incerteza nos portos com <span>inteligência preditiva.</span></h1>
+      <p class="hero-sub">
+        O Sistema Preditivo Transvidal aplica Redes Neurais Recorrentes LSTM treinadas com dados de line-up em tempo real, telemetria de frota e variáveis climáticas para antecipar gargalos operacionais com até 72 horas de antecedência — antes que o demurrage apareça na sua fatura.
+      </p>
+      <div class="hero-btns">
+        <a href="#demo" class="btn-red">↓ Ver Dashboard ao Vivo</a>
+        <a href="#contato" class="btn-ghost">✉ Entrar em Contato</a>
+      </div>
+      <div class="kpi-strip">
+        <div class="kpi"><div class="kpi-n">17</div><div class="kpi-l">Unidades Monitoradas</div></div>
+        <div class="kpi"><div class="kpi-n">72h</div><div class="kpi-l">Horizonte Preditivo</div></div>
+        <div class="kpi"><div class="kpi-n">&lt;4h</div><div class="kpi-l">MAE Médio do Modelo</div></div>
+      </div>
+    </div>
+
+    <!-- Direita: mini-dashboard interativo -->
+    <div class="fu panel hero-dash" style="transition-delay:.15s;padding:0;">
+      <div class="hero-dash-hdr">
+        <span class="hero-dash-title">Torre de Controle — Previsão IA</span>
+        <span class="live-pill">AO VIVO</span>
+      </div>
+      <!-- Lista dinâmica de portos -->
+      <div class="mini-ports" id="hero-mini-ports"></div>
+      <!-- Seletor de locais para o gráfico -->
+      <div style="padding:8px 14px 4px;border-top:1px solid var(--transvidal-gray-light);">
+        <div style="font-size:.65rem;text-transform:uppercase;letter-spacing:1px;color:var(--transvidal-gray-mid);font-weight:700;margin-bottom:6px;">Comparar no gráfico:</div>
+        <div id="hero-chart-selectors" style="display:flex;flex-wrap:wrap;gap:5px;"></div>
+      </div>
+      <div class="mini-chart">
+        <canvas id="heroChart" height="100"></canvas>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════ A DOR ═══════════ -->
+<section id="dor">
+  <div class="lp-inner">
+    <div class="fu">
+      <p class="lp-label">// O Custo da Imprevisibilidade</p>
+      <h2 class="dor-title">Cada hora de atraso tem um valor exato na sua nota fiscal.</h2>
+      <p class="dor-sub">Gestores que operam sem inteligência preditiva tomam decisões baseadas em dados de ontem. O resultado aparece no DRE do trimestre — na forma de demurrage, multas contratuais e frota imobilizada.</p>
+    </div>
+    <div class="dor-grid fu" style="transition-delay:.1s">
+      <div class="dor-card">
+        <span class="dor-icon">🚛</span>
+        <h3>Caminhão Parado = Capital Imobilizado</h3>
+        <p>Um bitrem graneleiro aguardando fila em porto gera custo operacional direto enquanto a janela de entrega fecha. Você remunera o ativo sem receber pela operação — e o cliente não perdoa o atraso.</p>
+        <div class="dor-cost">R$ 800–R$ 1.500 / dia / veículo parado</div>
+      </div>
+      <div class="dor-card">
+        <span class="dor-icon">⚡</span>
+        <h3>Demurrage e Multas Contratuais</h3>
+        <p>O embarcador cobra. O porto cobra. O armador cobra. Quando a imprevisibilidade domina a operação, as multas por atraso deixam de ser exceção e se tornam uma linha fixa no orçamento logístico.</p>
+        <div class="dor-cost">USD 3.000–8.000 / dia de demurrage</div>
+      </div>
+      <div class="dor-card">
+        <span class="dor-icon">📉</span>
+        <h3>Decisões Baseadas em Feeling</h3>
+        <p>Sem análise preditiva, o gestor de frota despacha sem visibilidade do tempo real de espera. Compromete janelas que nunca deveriam ter sido firmadas. Perde contratos para quem opera com dados.</p>
+        <div class="dor-cost">Impacto direto no NPS e na carteira de clientes</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ A CIÊNCIA ═══════════ -->
+<section id="ciencia">
+  <div class="lp-inner">
+    <div class="fases-hdr fu">
+      <p class="lp-label">// Metodologia de Três Fases</p>
+      <h2>A ciência por trás da previsão</h2>
+      <p>Não é heurística. Não é média histórica. É uma arquitetura de Inteligência Artificial projetada para a realidade operacional dos portos brasileiros — com modelos individuais para cada unidade monitorada.</p>
+    </div>
+    <div class="fases-grid fu" style="transition-delay:.1s">
+      <div class="fase-card">
+        <span class="fase-n">01</span>
+        <p class="fase-lbl">Fase 1</p>
+        <h3 class="fase-title">Coleta e Engenharia de Dados</h3>
+        <p class="fase-desc">Web scraping automatizado dos line-ups portuários em tempo real. Integração com API OpenWeather para telemetria climática. Ingestão de dados de frota e berços. Pipeline de limpeza, normalização e feature engineering para séries temporais de múltiplas fontes.</p>
+        <div class="fase-tags">
+          <span class="ftag">Web Scraping</span>
+          <span class="ftag">OpenWeather API</span>
+          <span class="ftag">Line-ups em Tempo Real</span>
+          <span class="ftag">Pandas / Numpy</span>
+          <span class="ftag">Feature Engineering</span>
+        </div>
+      </div>
+      <div class="fase-arrow">→</div>
+      <div class="fase-card">
+        <span class="fase-n">02</span>
+        <p class="fase-lbl">Fase 2</p>
+        <h3 class="fase-title">Treinamento do Modelo LSTM</h3>
+        <p class="fase-desc">Redes Neurais Recorrentes LSTM bidirecionais implementadas em PyTorch, treinadas individualmente por porto com janelas temporais de 30 dias. O modelo captura dependências de longo prazo — sazonalidade de safra, padrões climáticos e ciclos operacionais — que modelos lineares não conseguem modelar.</p>
+        <div class="fase-tags">
+          <span class="ftag">PyTorch LSTM</span>
+          <span class="ftag">Séries Temporais</span>
+          <span class="ftag">MAE / RMSE</span>
+          <span class="ftag">Early Stopping</span>
+          <span class="ftag">Modelo por Porto</span>
+        </div>
+      </div>
+      <div class="fase-arrow">→</div>
+      <div class="fase-card">
+        <span class="fase-n">03</span>
+        <p class="fase-lbl">Fase 3</p>
+        <h3 class="fase-title">Entrega de Insights via API e Dashboard</h3>
+        <p class="fase-desc">Modelos servidos por API REST de alta performance via FastAPI. O dashboard operacional atualiza previsões a cada 60 segundos com alertas Verde / Amarelo / Vermelho para janelas de 24h, 48h e 72h — acessíveis pelo painel ou diretamente no seu TMS via endpoint JSON.</p>
+        <div class="fase-tags">
+          <span class="ftag">FastAPI</span>
+          <span class="ftag">REST API</span>
+          <span class="ftag">Docker</span>
+          <span class="ftag">Alertas Preditivos</span>
+          <span class="ftag">Dashboard Real-Time</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ PORTOS ═══════════ -->
+<section id="portos">
+  <div class="lp-inner">
+    <div class="portos-hdr fu">
+      <p class="lp-label">// Cobertura Nacional</p>
+      <h2>17 unidades logísticas.<br>Monitoramento Ativo 24/7.</h2>
+      <p>Do corredor Norte ao eixo Sul-Sudeste, você tem visibilidade preditiva sobre toda a malha portuária e os hubs interiores críticos para o escoamento do agronegócio e da indústria brasileira.</p>
+    </div>
+    <div class="portos-layout fu" style="transition-delay:.1s">
+      <div class="porto-list-lp" id="lp-porto-list"></div>
+      <div>
+        <div id="lp-map"></div>
+        <div class="map-legend">
+          <div class="ml-i"><div class="ml-d" style="background:var(--transvidal-red)"></div>Porto Marítimo / Fluvial</div>
+          <div class="ml-i"><div class="ml-d" style="background:var(--transvidal-gray-dark)"></div>Hub Interior / Base Transvidal</div>
+          <div class="ml-i"><div class="ml-d" style="background:var(--status-ok)"></div>Monitoramento Ativo</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ RESULTADOS ═══════════ -->
+<section id="resultados">
+  <div class="lp-inner">
+    <div class="res-hdr fu">
+      <p class="lp-label">// Impacto Operacional Mensurável</p>
+      <h2>O que a previsibilidade entrega ao seu P&amp;L</h2>
+    </div>
+    <div class="res-grid fu" style="transition-delay:.1s">
+      <div class="res-card">
+        <span class="res-n">-40%</span>
+        <p class="res-l">Redução de Demurrage</p>
+        <p class="res-d">Com antecipação de 72h, você renegocia janelas e bloqueia o gatilho da multa antes que ela apareça na fatura.</p>
+      </div>
+      <div class="res-card">
+        <span class="res-n">+35%</span>
+        <p class="res-l">Utilização da Frota</p>
+        <p class="res-d">Otimização do despacho elimina fila desnecessária. O mesmo ativo produz mais viagens no mesmo período.</p>
+      </div>
+      <div class="res-card">
+        <span class="res-n">&lt;4h</span>
+        <p class="res-l">MAE Médio do Modelo</p>
+        <p class="res-d">Erro médio absoluto validado out-of-sample nos 17 portos e hubs brasileiros da rede Transvidal.</p>
+      </div>
+      <div class="res-card">
+        <span class="res-n">72h</span>
+        <p class="res-l">Horizonte Preditivo</p>
+        <p class="res-d">Visibilidade antecipada para reprogramar rotas, renegociar contratos e proteger suas margens operacionais.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ TECNOLOGIA / CTO ═══════════ -->
+<section id="tecnologia">
+  <div class="lp-inner">
+    <div class="tech-layout">
+      <!-- code block -->
+      <div class="fu">
+        <div class="code-block">
+          <div class="code-hdr">
+            <div class="code-dots">
+              <span style="background:#D32F2F"></span>
+              <span style="background:#f39c12"></span>
+              <span style="background:#27ae60"></span>
+            </div>
+            <span>GET /previsao/paranagua — 84ms · 200 OK</span>
+          </div>
+          <div class="code-body">
+<span class="cc">// Resposta da API — pronta para integração</span>
+{
+  <span class="ck">"porto"</span>: <span class="cs">"paranagua"</span>,
+  <span class="ck">"modelo_ativo"</span>: <span class="cv">true</span>,
+  <span class="ck">"mae_horas"</span>: <span class="cn">4.50</span>,
+  <span class="ck">"previsao"</span>: [
+    { <span class="ck">"data"</span>: <span class="cs">"2026-05-24"</span>, <span class="ck">"horas_espera"</span>: <span class="cn">55.4</span>, <span class="ck">"descricao"</span>: <span class="cs">"Crítico (24–48h)"</span> },
+    { <span class="ck">"data"</span>: <span class="cs">"2026-05-25"</span>, <span class="ck">"horas_espera"</span>: <span class="cn">48.1</span>, <span class="ck">"descricao"</span>: <span class="cs">"Crítico (24–48h)"</span> },
+    { <span class="ck">"data"</span>: <span class="cs">"2026-05-26"</span>, <span class="ck">"horas_espera"</span>: <span class="cn">39.7</span>, <span class="ck">"descricao"</span>: <span class="cs">"Elevado (12–24h)"</span> }
+  ],
+  <span class="ck">"alerta"</span>: <span class="cs">"LARANJA"</span>,
+  <span class="ck">"risco_pct"</span>: <span class="cn">57.7</span>,
+  <span class="ck">"recomendacao"</span>: <span class="cs">"Reagendar despachos nas próximas 48h"</span>
+}</div>
+        </div>
+      </div>
+      <!-- features -->
+      <div class="fu" style="transition-delay:.15s">
+        <div class="tech-hdr">
+          <p class="lp-label">// Para CTOs e Arquitetos de Dados</p>
+          <h2>Integração em dias, não em meses.</h2>
+          <p>A arquitetura foi projetada para se encaixar na sua stack atual. API REST documentada (OpenAPI 3.0), containers Docker isolados e endpoints JSON com latência &lt;100ms — sem lock-in de infraestrutura.</p>
+        </div>
+        <div class="tf">
+          <div class="tf-i">🐳</div>
+          <div>
+            <h4>Deploy Containerizado via Docker</h4>
+            <p>Toda a stack — modelo LSTM, FastAPI, scraper de line-ups — roda em containers Docker orquestrados por Compose. Portável, isolado e reproduzível em qualquer cloud ou on-premise sem refatoração.</p>
+          </div>
+        </div>
+        <div class="tf">
+          <div class="tf-i">⚡</div>
+          <div>
+            <h4>API REST de Alta Performance (FastAPI)</h4>
+            <p>Endpoints assíncronos com latência típica de 50–120ms. Documentação interativa automática (Swagger / ReDoc). Compatível com qualquer TMS, WMS ou sistema de gestão de frota que consuma JSON sobre HTTP.</p>
+          </div>
+        </div>
+        <div class="tf">
+          <div class="tf-i">🔄</div>
+          <div>
+            <h4>Pipeline de Dados Autônomo</h4>
+            <p>Scraping de line-ups e telemetria climática (OpenWeather) operam de forma autônoma, alimentando os modelos com dados frescos. Zero intervenção manual para manter a acurácia das previsões ao longo do tempo.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ DASHBOARD AO VIVO ═══════════ -->
+<section id="demo" style="background:var(--transvidal-bg-light);">
+  <div class="lp-inner">
+    <div class="demo-hdr fu">
+      <p class="lp-label">// Dashboard Operacional</p>
+      <h2>A mesma Torre de Controle que o gestor de frota usa todos os dias.</h2>
+      <p>Funcionando nesta página. Sem instalação. Previsões reais dos modelos LSTM treinados nos 17 portos e hubs da rede Transvidal.</p>
+    </div>
+
+    <!-- status bar (idêntica ao dashboard) -->
+    <div class="demo-status-bar fu">
+      <div>STATUS API: <span id="demo-api-status" class="api-offline">MODELOS LOCAIS</span></div>
+      <div>ÚLT. ATUALIZAÇÃO: <span id="demo-last-update">--:--:--</span></div>
+      <div>UNIDADES: <span id="demo-unit-count">17</span></div>
+    </div>
+
+    <div class="dashboard-embed fu" style="transition-delay:.1s">
+
+      <!-- Painel esquerdo: portos (cópia exata do dashboard) -->
+      <div class="embed-panel">
+        <div class="tabs" style="padding:0 12px;margin-bottom:0;border-bottom:2px solid var(--transvidal-gray-light);">
+          <button class="tab-btn active" data-tab="demo-tab-op">Operação</button>
+          <button class="tab-btn" data-tab="demo-tab-modelos">Modelos IA</button>
+        </div>
+        <div id="demo-tab-op" class="tab-pane active" style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+          <div style="padding:12px 14px 4px;"><h2 style="margin-bottom:0;padding-bottom:8px;">Rede Logística <small id="demo-count">0 unidades</small></h2></div>
+          <div id="demo-lista-portos"></div>
+        </div>
+        <div id="demo-tab-modelos" class="tab-pane">
+          <div style="padding:12px 14px 4px;"><h2 style="margin-bottom:0;padding-bottom:8px;">Status dos Modelos LSTM <small id="demo-modelos-count">--</small></h2></div>
+          <div style="padding:10px 14px;">
+            <div class="modelos-resumo">
+              <div class="resumo-card"><div class="resumo-num" id="dm-total">17</div><div class="resumo-label">Total</div></div>
+              <div class="resumo-card"><div class="resumo-num" id="dm-ativos" style="color:var(--status-ok)">17</div><div class="resumo-label">Treinados</div></div>
+              <div class="resumo-card"><div class="resumo-num" id="dm-pend" style="color:var(--status-crit)">0</div><div class="resumo-label">Pendentes</div></div>
+            </div>
+          </div>
+          <div id="demo-lista-modelos" style="padding:0 14px 14px;overflow-y:auto;max-height:340px;"></div>
+        </div>
+      </div>
+
+      <!-- Mapa central -->
+      <div class="embed-panel" style="padding:0;overflow:hidden;">
+        <div id="demo-map"></div>
+      </div>
+
+      <!-- Painel direito: rodovias + alertas (cópia exata) -->
+      <div class="embed-panel" style="padding:20px;">
+        <h2>Monitoramento de Rodovias</h2>
+        <div id="lista-brs-demo">
+          <div class="br-item"><div class="br-badge">BR-163</div><div class="br-info"><div class="br-nome">Corredor Norte (Sorriso/Miritituba)</div><div class="br-status-desc">Fluxo intenso, sem bloqueios.</div></div><div class="status-dot" style="background:var(--status-ok)"></div></div>
+          <div class="br-item"><div class="br-badge">BR-116</div><div class="br-info"><div class="br-nome">Eixo Sul-Sudeste (RJ/SP/PR)</div><div class="br-status-desc">Atenção: Chuva forte na Serra das Araras.</div></div><div class="status-dot" style="background:var(--status-warn)"></div></div>
+          <div class="br-item"><div class="br-badge">BR-364</div><div class="br-info"><div class="br-nome">Eixo Rondônia/Mato Grosso</div><div class="br-status-desc">Atenção: Obras em andamento.</div></div><div class="status-dot" style="background:var(--status-warn)"></div></div>
+          <div class="br-item"><div class="br-badge">BR-277</div><div class="br-info"><div class="br-nome">Acesso Porto de Paranaguá</div><div class="br-status-desc">Lentidão nos últimos 15 km.</div></div><div class="status-dot" style="background:var(--status-crit)"></div></div>
+          <div class="br-item"><div class="br-badge">BR-101</div><div class="br-info"><div class="br-nome">Litoral Sul-Sudeste</div><div class="br-status-desc">Condições normais de tráfego.</div></div><div class="status-dot" style="background:var(--status-ok)"></div></div>
+        </div>
+        <h2 style="margin-top:22px;border-top:1px solid var(--transvidal-gray-light);padding-top:14px;">Alertas de IA (72h)</h2>
+        <div id="demo-alertas-ia" style="font-size:.8rem;color:var(--transvidal-gray-mid);max-height:180px;overflow-y:auto;padding-right:4px;">Gerando previsões...</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ CONTATO ═══════════ -->
+<section id="contato" style="background:#1a1a1a;">
+  <div class="lp-inner fu">
+    <p class="lp-label">// Desenvolvedor do Sistema</p>
+    <h2 class="cta-title">Entre em contato</h2>
+    <p class="cta-sub" style="color:#ccc;">O Sistema Preditivo Transvidal foi desenvolvido por Diogo Inácio. Para dúvidas, integrações ou acesso à plataforma, utilize os canais abaixo.</p>
+    <div style="display:flex;justify-content:center;gap:2rem;flex-wrap:wrap;margin-top:2rem;">
+      <a href="mailto:diogolib.inacio200@gmail.com" style="display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);padding:1rem 1.75rem;border-radius:3px;color:#fff;text-decoration:none;transition:background .2s;" onmouseover="this.style.background='rgba(211,47,47,.18)'" onmouseout="this.style.background='rgba(255,255,255,.06)'">
+        <span style="font-size:1.5rem;">📧</span>
+        <div>
+          <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:1.5px;color:#f87171;font-weight:700;margin-bottom:3px;">E-mail</div>
+          <div style="font-size:.9rem;font-weight:700;color:#fff;">diogolib.inacio200@gmail.com</div>
+        </div>
+      </a>
+      <a href="https://instagram.com/diogok_i" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);padding:1rem 1.75rem;border-radius:3px;color:#fff;text-decoration:none;transition:background .2s;" onmouseover="this.style.background='rgba(211,47,47,.18)'" onmouseout="this.style.background='rgba(255,255,255,.06)'">
+        <span style="font-size:1.5rem;">📸</span>
+        <div>
+          <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:1.5px;color:#f87171;font-weight:700;margin-bottom:3px;">Instagram</div>
+          <div style="font-size:.9rem;font-weight:700;color:#fff;">@diogok_i</div>
+        </div>
+      </a>
+      <div style="display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);padding:1rem 1.75rem;border-radius:3px;">
+        <span style="font-size:1.5rem;">👤</span>
+        <div>
+          <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:1.5px;color:#f87171;font-weight:700;margin-bottom:3px;">Desenvolvedor</div>
+          <div style="font-size:.9rem;font-weight:500;color:#fff;">Diogo Inácio</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ FOOTER ═══════════ -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxIPEBUQEhAVFRUVGBkZFRgYFR0VFxcYGhgWGhgXFxcYHSggGholHhgWITEhJSkrLi4uFx8zODMtNygtLisBCgoKDg0OGxAQGy0lICYrLS0rLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAK0BJAMBEQACEQEDEQH/xAAcAAEAAgMBAQEAAAAAAAAAAAAABgcDBAUBAgj/xABHEAABAwICBQcGDAUDBQEAAAABAAIDBBESIQUGMUFRBxMiYXGBkRcyUqGx4hQWQlRiZHKCkpOjwSMzU8LSQ7LRJGOi4fAV/8QAGwEBAAIDAQEAAAAAAAAAAAAAAAEEAgMFBgf/xAA4EQEAAgIBAgQCCAMIAwEAAAAAAQIDEQQFIRIxQVETYRQicYGRobHhFjJCBhUjUmOiwfBi0fFT/9oADAMBAAIRAxEAPwC8UBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAlB5dB7dAugXQLoCAgICAgICAgICAgICAgICAgICAgh2mtdnUs74HU18JyPOWxAi4NsCDS8pH1X9X3FOkbPKR9V/V9xNGzykfVf1fcTRs8pH1X9X3E0bPKR9V/V9xNGzykfVf1fcTRs8pH1X9X3E0bPKR9V/V9xNGzykfVf1fcTRs8pH1X9X3E0bSGj1gJpjVVEfMM2tu/E5w7MI25WG9RaYrG5bcOK2a0UpHf9Eadyli5tSXG68tjbr6CqTyvaHoI/s9Ou+T8v3h55S/qn6vuKPpfyT/Dv+p/t/c8pf1T9X3E+l/I/h3/U/wBv7vWcpJcQBRkk5ACW5J4AYEjlTPbSJ/s9FYm05dRHrr9040fLI+NrpYxG47Wh2LDwBNhmrdZmY3Lz2WtK3mKTuPdtKWAgICAgICAgICAgICAgICAgICAgg/KFoGSZ8c0MZe6xa8NGdhm0+0eCCIfFqs+ayfhU7Ro+LVZ81k/CmzR8Wqz5rJ+FNmnPqqZ8TzHI0tcNoIsRvUjCiBAQEG5QaLmqLmKJzw3bYXsidJJq9qzzWKqrRzcUWeF21xHEcOreVjNtRuWePHbJeK0ju4WtGsL66S/mxt/ls4fSPFx9S5uXLN5+T3HT+BTi4/8AynzlxFpdAQACcgLk7FMRM+RPbvK09SdUxTNE8zbzEdEbRGD/AHde7Yr+HD4frT5vH9U6pOefhY/5I/NMbKw4r1AQEBAQEBAQEBAQEBAQEBAQEBAQa9fI9sT3RgF4aS0HYSBkDbionyZUiJtESq/yqVHzaLxcq3x7ekO5HSMf+afwg8qlR82i/E5Pj29j+6Mf+afwj/2lGo+uLtIvkjkjaxzQHNwk5tvY7eBw+K248vjUedwvo8RMTuHM5TtH2fHUAecMDu0Ztv3X8AtznygqliICDr6t6BkrpcLeixvnv3AcBxceChK1oo4KGCwtHHGLkn1kneSsZnUblnjpbJbwVjcqr1t1mfXPwi7YWnot3n6Tuvq3Ln5cs3nXo9p03pteLTxW72n/AL2R5aHUEABSbWXqPqjzNqmob/E2sYfkdZ+l7Few4Nd5eT6t1T43+Di8vWff9k5srLgvUBAQEBAQEBAQEBAQEBAQEBAQEBAQeFESojXnRnwWulYBZrjzjOFnZ5dhxDuVHJWYl6vhZoyYIn1js4KwXHZ1O0n8ErYpSbNxYX/ZdkfDI9yzx28M7VOZi+LhtVcutNB8JpJGAXcBiZ9puY8cx3q9DyamlkCIdLQWhpKyURsFgM3u3NHHt4DeiVtUNJFRQYG2axgu5x38XOPFYzMRG5Z1pNpitfNVuuGszq2TC0kQtPRHpH0nfsNy52bLN516PZ9M6dHGr4rfzT+XyR1aHVEBBZOouqXNhtVO3pnONh+R9Ij0vYr2DDrvLyvVuqfE3gxT9X1n3TsK08+9QEBAQEBAQEBAQEBAQEBAQEBAQEBAQEFecr2i8UUdUBnGcDvsu2eDv9y0Z67jbr9JzavOP3VYqrvPESvnUnSnwuhikJ6QGB/2m5E9+R71exzuHkuZh+Fmmqt9a9HfBquSMCzScTfsuz9WY7lsVZYtBaHkrJRGzIbXOOxo4nr4BSQtnR1DDQwYW2axou9xNr2GbnFYz82VYm0xWFY65a3mscYoiWwNPYZD6TurgP8A4UM2Wbdo8nr+l9OjBHjv3v8ApCMgqs7T1AUwlYOo2p/m1VQ3rjjI8HOHsCuYMP8AVZ5jqvVd7w4fvlYYVt5t6gICAgICAgICAgICAgICAgICAgICAgICDQ05o8VVPLAfltI7DtB7jYrG0bjTZhyTjyRePR+epIy1xa4WLSQRwIyKozGuz2FZ3ES+VDJYXJDpTDLLSuOTxzjPtNycO8WP3SrGC3o43VsW6xk/FJteNXn1boXRAYrljidgacw49Qz/ABK1DhO1obRUVDDgachm95yxHe4ncPYFEmtqq181zNa8wQm1O07f6pHyj9Ebh38FTy5Jt2h6fpvBrhiL385/JFmPVfTtRLOx6xbq2ZQoZ635LA1D1SxYaqobltiYd/03D2DvVzBh/qs811bqk98OKftn/hYoVt5p6gICAgICAgICAgICAgICAgICAgICAgICAg8sgpTlK0Z8Hr3uA6Mw5wdux/rz+8qeaNWem6bl+JhiPbt9yKrUvt7QekTSVMVQCeg4F1t7djh4ErKs6nbTnw/FxzT3foPnm4cdxhte98rWve/CyvvIanelMcoWvxrCaWmcRADZ7xkZSOH/AG/bt2ba2S8z2h3eDw4p9e/mhDHrRp2Ky2GPWOm6tmxG9Yt1ZWFqFqgZsNVUN/h7Y2H5fBzh6PAb+zbYw4dz4rOL1Tqvh3ixT39ZWg0WVx5h6gICAgICAgICAgICAgICAgICAgICAgICAgICCEcq2i+epBMPOgdf7jsnevCe5ac1dxt0ul5fBm8M+UqgVR6R4g6Gsuus8lHDo8XYxrbSuvnKAbNb1NAtcbz1Lf45munJtxaUzTf38vkicb1gtRZsMeo02xLYjesdN1ZWJyc6n/CSKuob/CB/htP+oR8o/QHr7Nu7Fi3PilzOo9Q8EfCxz39VvNFlaedeoCAgICAgICAgICAgICAgICAgICAgICAgICAgIMFdStmjfE/zXtLXdhFiomNxplS01tFo9H570to59LO+CQdJht2jc4dRGaozWYnUvX4stctIvVqLFta1dS84228bD+3YpidNWWnihxSC02cLFbPNT7xOpZY33TTZFli8nWorqxwqahpbTg9FpyMpHsYN/FZ46b7yqc3m/CjwV8/0XZHGGgNaAABYACwAGwAKy4M7mdy+0BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQRfXPVJmkGBwIZM0dF9siPRfxHXuWrJji/wBq7w+bbBbU96yqDS+hqijdhnic3g612H7LhkVVtW0dnosXIx5Y3WXPusW7u9bFjIaG4idgAuSeoKY3Pki3h850neqHJ2+Rwmqmc3HtEex7+GK3mjq29i348Uz3lyeX1KlYmuLz91rwxNY0NaAGgWAGQAGwAKy4UzMzuWRECAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICD4kia4Wc0EHaCLjwKTG0xMxO4cibVWhecTqSG/UwD1BY+Cvs3xy89Y1Fp/FuaP0TBT/AMqCNnW1gB8dpSKxHlDXfNkyfzWmW7ZZNb1AQEBAQEBAQEBAQEBAQEBAQEBAQEEN151jmpJI44SBdpc67Q7fYbewpAjPx5rfTZ+WFIfHmt9Nn5YQdfQ2tVTJBUzSOYeaYMPRDem4kN7dmxQOR8ea302fgCkfUevdYDcujd1FmXqIKCb6q6zMrmkYcEjc3NvcEek08L7lA39O6SFLTvmPyR0RxccmjxQVv8ea302flhSJrqPpeWrge+UgubIWiwtlhadneVA2tbdJupaV0rCA+7Q24vmTw7L+CCAfHmt9Nn5YUizNEVongjmHy2gnqO8eN1Ar/TOulSyolZG9uBr3NbdgvYG2/PbdBLqzTwo6SOWe7pHtb0RYFziASMsgBfaghlVr/VOPQEbBu6OI95J/YKRg+PNb6bPywg6msGtdTDFSyRvb/Fiu+7ARjBAdbhmq3IyWpPZ2+kcDDya2nJ6OlqDrFNWOlbM4EsDS2zQ0WNwdiYMs380dX6fi4vhnH5SkumK9tNA+Z2xgvbidwHWTYLda3hjbl4MM5skY49VYR68V73BrXMJcQAObG0nIKj9IyTPZ6uei8Old232j3djWnWerpJI4WyMLxG0ynCD0yTu3C37LblzWpMRCl07pvG5FLZJideKdd/R5BrVVf/nyVT3Nx862OPoADYC4gfK3juUxmt8OZkv0vB9NrhrE61ue7jfHyu9Nn5YWn6Td0P7k4ntP4slPygVjTd3NvHAst62kJHJuwv0HjTHbxR96a6ra3RVvQI5uUC+Em4dxLTv7NqtY80X+1wef0vJxe/nX3SQrc5is9YdeJ2VL2U7miNhwi7Q65GTjfhe6p5ORaLah6rhdGw2wVtmifFPz19jJqtrhUz1ccUr2ljyRYMAzwkjPtCYs1rXiJYdQ6Tgxce2SkTuFkXVx5hVOkdeats0gje0MD3Bt2AmwJtnvyVC3IvvT1+DovGnFWbxO5j3WVoeR76eJ0hBe5jS4gWFyL7FdrM+GNvK8ita5bRTyidQ3Vk1CAgICDQrdDU87sckDHuta5FzYbAgq7XSKOOsfHExrGsDRZotnYE38VKJSnUbQEEtIJZYWvc9ziC4XyHRy6sikpNe6eKlo+bhjaznZG3wjbhu7PwCQI/yfULZqs42tc1jHEhwuLmwGWzeg6fKPTU8YjEbGNlJNw0AdC28Dr2d6DU5NIHOq3PA6LGHEftEW9h8ElDPylaVxytpmnKPpP+0dg7h/uSBxa3RHNUENQR0pHu7cJaMP+1x+8hpJeSyUWnZfO7Dbq6QJ9ihLNyoVNoYo/SeXHsaLZ/i9SmBAPgrua575OPBs34b7VKFhcnekv+kkYf8ARJP3SC7b2hyhKv6OMzzsadsjwDfPznZ347UEl5S3H4TG3Y1sYw8My69vAJCJa2pT6PG5lU1pLrYC/wAwcQeB2ZlBYLdW6I7KaL8KhKKcp1E2OCnwNDWsc9oaNnSAOX4T4qpyo7RL0P8AZ6/+JePlE/g53JbNarey/nRnLiWubb1Fyw4s/W18lzr9N4K29p/Vtcp+mMT20jTk2zpO0+a3uGfeFlyb/wBLT0HidpzW+yGnyb6H56c1Dh0IdnW87PAZ94WPHpudt/XOX8PFGOPO3n9jk651XO105vkHYRlbzQG+0Fas1t3ld6Xi8HFpHy3+Lc02ea0bRxb3l8p37cmm/Y7Ys79sdYaOH/ic3Lk9tQ3OTTRrJppXyMD2sYAA4Ai7jwO/olZcasTaZlo67ntjxUrSdTMykWuGqcD4JJoo2xyMaXdHohwAuQQMtgyK3ZsNZruHL6b1LLTNWl53We32bVlQVboJWStNixwI3bN3ePaqNbTW0TD1mfFGXFak+sLg1v0x8FpHPB6bxhj+04be4XPcullv4avE9O4nx+RFZ8o7z9itNU9GfCJJHOF2xRve6+84ThHjn3FUsVfFMzL1XUuR8GkVr52mIj5d2rqxKWVlO4becaPxENPtWGKdZIb+oV8fGyR7xK5tKVHNQSSeixx8AbLpWnUTLwmCnjy1r7zCjaGDnJGRja9zW9eZA/dcusbmH0HLb4eO1vaNr8jbYAcMl1nzmZ3O32gICAgIBQUhpup52pmk9J7iM75XsM+wKRburVNzVJCzgxpOVsyLnvzUCGcqNTeSGK/mtc45+kQBl90qYEVoqSoLHSQslLRk5zL7hexw9qka8DmmQGUuLSemQbutvIvvUC3Y2QaOo3SRABjW4r3uXkjo3O8nIIKma/n5g6V9ucfd7zuucypRtLdedK001NFFBI12B4yAIs0McBtHYoNsfJfLaolbbbHfwcB/ckpYuUuoxVTWegwX7XEn2WQZqPROPQr3WzxmUb/Ns0/+Icmxw9Xq7mhUN3SQPb37j7VKGbUem5yui4Nu8/dBt67KJIWLrPq8yujAJwvb5jrXtxBG8KEqu0zoOejdaVmR2OGbT2Hd2FSh29RNPyRTNpnOJjkNgDngcdmHqJysmkpHylw4qHFa+B7TfgDcfv61X5Mbo7HQr65UR7xKv9U9JtpKkTOFwGvB72mwHaQB3qniv4L7el6jx55HHnHHnuHOqJn1Epeek+R1+0uOQHsWNpm0rFK1w44iO0RH6Lm0Do5tDSNjNui0ueeLrXcez9gujSngrp4Xl555Oeb+86j7FLzPMshdtL3E8c3HZ61zp+tbb3laxjpr0iI/KEg1+cBURwjZDDGzvtc5bjmFtzz9aI9nM6PG8Vsk/wBVplKuS2mw0z5PTk4Z2aANu8XJW/ix9Rx+vZN54p7R+ru621ohopnE7WFoHFzhhA9fqW7LOqy5/TsVsnIpWPff3QpemgMj2xtHSeQ0dpNlzIjdoh7zJeKVm8+URv8ABJOULSnPVPNNPQhGEcC75R9g7lu5F/FOvZyujcb4eHxz537/AHOzqVpGjpqVwknaJJSS8Z5DMNbs4Z9624bUrTzUeqcfl5+RE1pPhr5IHSPwSMde2FzTfsIKqV7W29Fkr4scxP8Aln9Ft6/VeDR8lj5+FoztkSL+q66GedY3i+kYvHy6xPp3/BXmo9NzlfCDsaS7Z6IJHrsqeCN3h6fq2TwcS/z7LoXSeFEBAQEBBqaVqOagkk9BjnbL7AbZIKUoafnZWR+m5reG0gfushejRYWWIqXXyo5yuk4MDWjuAJ9ZKlG045P6bBQsNs3lzj42F+4BQlXetUTWVs7WiwxnLtAJ9ZUjqazaZx0lLTNde0THSG+/DZrT2ZnwQa+reqj65jpBIGNacIu29za58LjxRGmXWDVB1FDzxma8Yg2waRtvvv1IaOTyXDXNF7YmuHble3q9SJaGttTzlbO7cH4RnfJvRy6sr96I2tHQFEGUUURAsYxiytfELu9pUJU/pClMMr4jtY4t8DkVkjSQ6kTCnFTVkA81GAAcrlzshi3HK3eoHT8o7vmo/M91NJc3WDXN1XCYOYawOIucWI5G+WQtmAiNtXUfRrp6tjgDgiONx3C3mi/WbZdqbSsDXWn5yhmbYmzcWX0SHfstWWN0ld6bk8HKpKl1zNvfeqYcm2h+eqDO4dGHZ1vOzwGfgrHGpudy4fXOVOPFGKPO3n9id631HNUM7gc8BAtxdZv7q3ltqky850/H8Tk0r81T6tU3O1kDCMjI0nsBxH1Arn4o3aIez5+TwcbJb5afWtFTztbO/P8AmEC/BvRHsTLbdpR0/H4ONSvy/XukGgdd2UlKyAU7nFoOeMAEkk8Mhmt2PkRWutOZy+j35GecnjiN/KXD1i1jmrnDHZrG+awbB1nietasmW1/N0eF07Hxa7p3mfOZ7OhobRrqOB2kZRYgWp2naXuyDyOAzIHVfgs6UmkeK33KvK5McnNHFxTuP6p+UecOHomgfVzthaek85uOdt5ceO9aq1m06dHkZ68fDN9dojy/4S7yayfOWfgP/KsfRPm4f8Q09KT+P7IPPGWOc07Wkg9oNv2VaY1MvRVtFq794/VO+UStx0tI30wJCOxgG37xVrkW3SHnOi4fDyMs+3b80Y1a038BlMwjxktLQMWG1yDfYeC0Y8ngnenX5/D+lUini1920n8pj/mrfzD/AIrd9Ln2cr+Hq/8A6fl+6wKKZz42Pc3C5zQSL3sSLkX3q5E7jbzWSsVvNY76Z1LAQEBBq6UohUQvhc5wDxYlpsbXB/8ASDg6P1Ip4JWStfISw3AcWkX/AApsShBFazUWnlkfK6SW73FxsW2uTfLo7E2JFQUjYImRNuQxoaL7bDig4OlNS6epmdM58gc8gkAi2wDeOpBq+T2m/qS+Lf8AFTsSTROjmUsTYY74W327SSbknrUDHpzRLKyLmpC4C4PRsDcX4jrQcrRWpkFNMyZj5C5l7AkWzBGdh1qdjXl1ApnOLjJLckk5t2k3PyU2aSxrbCygRzS+psFVM6Zzntc61w0gDIAXzHUp2PYNT4WU8lO18mGRzS43F+jsGy1lA0/J7S/1JfFv+KnY+49QKQEEmU9ReLHtsAU2jSR0FDHTs5uJgY3gOPE8T1qEssj25AkdLIA78r268gUTET5wiNbyfU0kmJr3xgm5Y0gjuuMgq88Wszt2cXXuRjp4JiJ/VJtF6OjpYhFE3C0d5J3kneVurWKxpy8+e+a/jyT3YtOaKZWRGF5cGkg9GwOWzaovSLxplxeTfjZPiUjv8/m5OhtTIKSYTMfIXAEAOIIzFtwWumGtJ2ucnq2bkY/h2iNNN/J5Skk85LmeLf8AFR9Fr6t1evZ4iIiKjOTql3vmP3mj+1PotE/3/wAn2j/v3urozVKjpyHNhDnDY55xkHiL5A9yzrhpX0U8/U+Tm7WtOvl2ZNYdXY64MEj3gMvYNIAJO83BU5MUX82PD51+LMzSI3PuwaA1TgopDKwvc4tw9Ig2F7m1h1KMeGte8M+Z1PLyq+G8REfJ3lt250fJD6nUGlc8udLIC9xIGJuZN3EDLt8FXnj0me7t4+ucitYiKxqNens3NI6mw1DYmvlltEwMb0hmBvOW3/hZ2wRbW2jB1bLhm81iPrTuWj5OqX+pL4t/xWH0Wix/f/I9a1et5OqW/wDMl8W/4pHGpsnr3ImNahMmtsLcFYcSe87fSAgICAgICAgICAgICAgICAgICAgIORW0+OrhJY4tY2Q4s8If0cN7bMsWfXZYWr9aFnHfw4bxE951+Hdk0xC6Tmo2h1nSDGWuLbNaHOzI3EhrfvKbb3DHj2rXxWn27fayaUD207hEDiAAbhFyBcA4QdpAvZLdo7IweGckTfyamgYbPmcGPY0loYH3u4NaLydI3uSbZ59EXUUju28m31axuJnvvX6fc19M0kkrpjZ5wsYyIAkdMkl0g3Etu0g7sJUTXcyz4+SlIrE+8zP2ekOzWD+E4Xd5pF2i7xla4A371nPeFSn88T2aur7HNgAczAbu4i4xGzyCSQXCxIOy6ink2cmYnJ2nbkUQM0wkaJMXPuJecQYImXZhbfI4rDIdZWEbnv8ANbyax08Ntfy+Xrue/wCTsabx4WhocW4287hviwZ3sBmc8INs7XWd1Tj68U71vXbfu+NBQuYx9wWtLyY2O2sZYADPZcgutuxW3KKRo5NotNdd513n3l9aNpjzs0rw65eQwFxIDA1ou0bBiLbqYjvKct48Fa19u/2/s+K2nx1cLixxaxjyCL4cZLbXtsNg7btvZRMbtCcd/DhtET3mY/B86wB5bGGhxaZP4mFpf0cLtrWkOLcWG9vZdTfZxZru29b123277bei4eaga27jYfKHS42tutsskRqGrLbx3mWroGMt5y7XWL7h7gWueDnm12Yw3w3yvZRWJ228m0W8Pl5eUen/ANddZqwgICAgICAgICAgICAgICAgICAgICAgICDyyD1AQEHxHGGiwAAGwAWCEzudy+0BAQECyAgWQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBB/9k=" alt="Transvidal" style="height:34px;border-radius:3px;opacity:.8;">
+      <div class="footer-brand-txt">
+        <strong>Transvidal</strong>
+        Sistema Preditivo de Logística Portuária
+      </div>
+    </div>
+    <div class="footer-links">
+      <a href="#hero">Início</a>
+      <a href="#ciencia">Tecnologia</a>
+      <a href="#portos">Portos</a>
+      <a href="#demo">Dashboard</a>
+      <a href="#contato">Contato</a>
+    </div>
+    <div class="footer-tech">
+      PyTorch LSTM · FastAPI · Docker · Leaflet.js<br>
+      <span style="color:#2a2a2a">© 2026 Transvidal. Todos os direitos reservados.</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+// ─── DADOS (idênticos ao dashboard.html) ─────────────────────────────────
+const MODELOS_REAIS = {"fortaleza":{"treinado_em":"2026-05-23","mae_horas":2.93,"rmse":3.67},"itajai":{"treinado_em":"2026-05-23","mae_horas":3.7,"rmse":4.84},"itaqui":{"treinado_em":"2026-05-23","mae_horas":4.37,"rmse":5.85},"miritituba":{"treinado_em":"2026-05-23","mae_horas":2.95,"rmse":3.77},"paranagua":{"treinado_em":"2026-05-23","mae_horas":4.5,"rmse":5.49},"ponta_grossa":{"treinado_em":"2026-05-23","mae_horas":3.21,"rmse":4.14},"rio_de_janeiro":{"treinado_em":"2026-05-23","mae_horas":3.45,"rmse":4.22},"rio_grande":{"treinado_em":"2026-05-23","mae_horas":3.98,"rmse":4.83},"rondonopolis":{"treinado_em":"2026-05-23","mae_horas":3.93,"rmse":4.93},"salvador":{"treinado_em":"2026-05-23","mae_horas":3.81,"rmse":4.65},"santarem":{"treinado_em":"2026-05-23","mae_horas":4.07,"rmse":4.9},"santos":{"treinado_em":"2026-05-23","mae_horas":3.33,"rmse":4.05},"sao_francisco_sul":{"treinado_em":"2026-05-23","mae_horas":3.48,"rmse":4.13},"sorriso":{"treinado_em":"2026-05-23","mae_horas":4.4,"rmse":5.22},"suape":{"treinado_em":"2026-05-23","mae_horas":3.91,"rmse":4.64},"vila_do_conde":{"treinado_em":"2026-05-23","mae_horas":3.78,"rmse":4.58},"vitoria":{"treinado_em":"2026-05-23","mae_horas":3.72,"rmse":4.77}};
+
+const PREVISOES = {"paranagua":{"horas":55.4,"alerta":"LARANJA","risco_pct":57.7,"tendencia":"down"},"santos":{"horas":50.1,"alerta":"LARANJA","risco_pct":52.2,"tendencia":"down"},"rio_grande":{"horas":54.2,"alerta":"LARANJA","risco_pct":56.4,"tendencia":"down"},"itajai":{"horas":40.7,"alerta":"LARANJA","risco_pct":42.5,"tendencia":"down"},"sao_francisco_sul":{"horas":44.2,"alerta":"LARANJA","risco_pct":46.6,"tendencia":"up"},"rio_de_janeiro":{"horas":37.1,"alerta":"LARANJA","risco_pct":39.0,"tendencia":"up"},"vitoria":{"horas":39.7,"alerta":"LARANJA","risco_pct":41.5,"tendencia":"down"},"salvador":{"horas":33.7,"alerta":"AMARELO","risco_pct":35.1,"tendencia":"down"},"suape":{"horas":35.2,"alerta":"AMARELO","risco_pct":36.7,"tendencia":"down"},"fortaleza":{"horas":34.5,"alerta":"AMARELO","risco_pct":35.9,"tendencia":"down"},"itaqui":{"horas":63.3,"alerta":"LARANJA","risco_pct":66.0,"tendencia":"down"},"vila_do_conde":{"horas":51.2,"alerta":"LARANJA","risco_pct":53.3,"tendencia":"down"},"santarem":{"horas":49.2,"alerta":"LARANJA","risco_pct":51.7,"tendencia":"up"},"rondonopolis":{"horas":32.1,"alerta":"AMARELO","risco_pct":33.5,"tendencia":"down"},"sorriso":{"horas":32.7,"alerta":"AMARELO","risco_pct":34.0,"tendencia":"down"},"miritituba":{"horas":34.6,"alerta":"AMARELO","risco_pct":36.3,"tendencia":"up"},"ponta_grossa":{"horas":33.5,"alerta":"AMARELO","risco_pct":35.0,"tendencia":"up"}};
+
+const locacoesTransvidal = {
+  "paranagua":         {name:"Porto de Paranaguá (PR)",         lat:-25.5026,lon:-48.5146,type:"porto"},
+  "santos":            {name:"Porto de Santos (SP)",            lat:-23.9618,lon:-46.3322,type:"porto"},
+  "rio_grande":        {name:"Porto de Rio Grande (RS)",        lat:-32.0353,lon:-52.0986,type:"porto"},
+  "itajai":            {name:"Porto de Itajaí (SC)",            lat:-26.9021,lon:-48.6513,type:"porto"},
+  "sao_francisco_sul": {name:"Porto São Francisco do Sul (SC)", lat:-26.2443,lon:-48.6366,type:"porto"},
+  "rio_de_janeiro":    {name:"Porto do Rio de Janeiro (RJ)",    lat:-22.8953,lon:-43.1979,type:"porto"},
+  "vitoria":           {name:"Porto de Vitória (ES)",           lat:-20.3155,lon:-40.3128,type:"porto"},
+  "salvador":          {name:"Porto de Aratu/Salvador (BA)",    lat:-12.7981,lon:-38.4729,type:"porto"},
+  "suape":             {name:"Porto de Suape (PE)",             lat:-8.3941, lon:-34.9592,type:"porto"},
+  "fortaleza":         {name:"Porto do Pecém/Fortaleza (CE)",   lat:-3.5414, lon:-38.8236,type:"porto"},
+  "itaqui":            {name:"Porto do Itaqui (MA)",            lat:-2.5786, lon:-44.3644,type:"porto"},
+  "vila_do_conde":     {name:"Porto de Vila do Conde (PA)",     lat:-1.5544, lon:-48.7516,type:"porto"},
+  "santarem":          {name:"Porto de Santarém (PA)",          lat:-2.4187, lon:-54.7135,type:"porto"},
+  "rondonopolis":      {name:"Hub Rondonópolis (MT)",           lat:-16.4678,lon:-54.6361,type:"hub"},
+  "sorriso":           {name:"Hub Sorriso (MT)",                lat:-12.5512,lon:-55.7226,type:"hub"},
+  "miritituba":        {name:"Estação Miritituba (PA)",         lat:-4.2711, lon:-55.9912,type:"hub"},
+  "ponta_grossa":      {name:"Silo Ponta Grossa (PR)",          lat:-25.0916,lon:-50.1668,type:"hub"}
+};
+
+const perfilOp = {
+  "paranagua":         {carga:"Soja / Farelo / Açúcar (granel)",    veiculo:"Bitrem graneleiro 7 eixos"},
+  "santos":            {carga:"Açúcar / Café / Containers",         veiculo:"Rodotrem 9 eixos"},
+  "rio_grande":        {carga:"Soja / Arroz / Celulose",            veiculo:"Bitrem graneleiro 7 eixos"},
+  "itajai":            {carga:"Containers / Refrigerados",          veiculo:"Carreta porta-container 6 eixos"},
+  "sao_francisco_sul": {carga:"Soja / Trigo / Fertilizantes",       veiculo:"Bitrem graneleiro 7 eixos"},
+  "rio_de_janeiro":    {carga:"Containers / Siderúrgicos",          veiculo:"Carreta porta-container 6 eixos"},
+  "vitoria":           {carga:"Café / Celulose / Minério",          veiculo:"Rodotrem 9 eixos"},
+  "salvador":          {carga:"Containers / Químicos",              veiculo:"Carreta tanque 6 eixos"},
+  "suape":             {carga:"Containers / Combustíveis",          veiculo:"Carreta tanque 6 eixos"},
+  "fortaleza":         {carga:"Frutas / Containers",                veiculo:"Carreta refrigerada 6 eixos"},
+  "itaqui":            {carga:"Soja / Milho / Fertilizantes",       veiculo:"Rodotrem 9 eixos"},
+  "vila_do_conde":     {carga:"Soja / Milho / Bauxita",             veiculo:"Bitrem graneleiro 7 eixos"},
+  "santarem":          {carga:"Soja / Milho (corredor norte)",      veiculo:"Bitrem graneleiro 7 eixos"},
+  "rondonopolis":      {carga:"Soja / Milho (origem MT)",           veiculo:"Rodotrem 9 eixos"},
+  "sorriso":           {carga:"Soja / Milho (origem MT)",           veiculo:"Rodotrem 9 eixos"},
+  "miritituba":        {carga:"Soja / Milho (transbordo)",          veiculo:"Bitrem graneleiro 7 eixos"},
+  "ponta_grossa":      {carga:"Soja / Farelo / Malte",              veiculo:"Bitrem graneleiro 7 eixos"}
+};
+
+// ─── PALETA DE CORES PARA O GRÁFICO ──────────────────────────────────────
+const CHART_COLORS = [
+  '#D32F2F','#27ae60','#2196F3','#f39c12','#9c27b0',
+  '#00bcd4','#e91e63','#4caf50','#ff5722','#607d8b',
+  '#795548','#ff9800','#3f51b5','#009688','#cddc39',
+  '#8bc34a','#ffc107'
+];
+
+// ─── GERA SÉRIE TEMPORAL PARA UM PORTO (usa previsão real como base) ─────
+function gerarSeriePara(portoKey){
+  const prev = PREVISOES[portoKey];
+  const base = prev ? prev.horas : 20;
+  const seed = portoKey.charCodeAt(0) + portoKey.length;
+  // 7 dias com variação em torno da previsão base
+  return Array.from({length:7},(_,i)=>{
+    const noise = ((seed * (i+1) * 13) % 17) - 8;
+    return Math.max(2, Math.round(base + noise));
+  });
+}
+
+let heroChartInst = null;
+let heroSelectedPortos = new Set(['paranagua','santos']);
+
+function buildHeroMiniPorts(){
+  const el = document.getElementById('hero-mini-ports');
+  if(!el) return;
+  // Mostra os 6 com maior previsão de espera
+  const sorted = Object.entries(PREVISOES)
+    .sort((a,b)=>b[1].horas-a[1].horas)
+    .slice(0,6);
+  el.innerHTML = sorted.map(([k,v])=>{
+    const sc = v.horas>72?'crit': v.horas>36?'warn':'ok';
+    const ti = v.tendencia==='up'?'▲': v.tendencia==='down'?'▼':'—';
+    return `<div class="mp-row ${sc}">
+      <span class="mp-name">${locacoesTransvidal[k]?.name||k}</span>
+      <span class="mp-h">${v.horas}h ${ti}</span>
+    </div>`;
+  }).join('');
+}
+
+function buildHeroSelectors(){
+  const el = document.getElementById('hero-chart-selectors');
+  if(!el) return;
+  const keys = Object.keys(locacoesTransvidal);
+  el.innerHTML = keys.map((k,i)=>{
+    const sel = heroSelectedPortos.has(k);
+    const cor = CHART_COLORS[i % CHART_COLORS.length];
+    const name = (locacoesTransvidal[k].name||k).replace('Porto de ','').replace('Porto do ','').replace(' (','\n(');
+    const shortName = (locacoesTransvidal[k].name||k).split('(')[0].trim().replace('Porto de ','').replace('Porto do ','').replace('Hub ','').replace('Silo ','').replace('Estação ','');
+    return `<button
+      onclick="toggleHeroPorto('${k}',${i})"
+      id="sel-btn-${k}"
+      style="
+        padding:3px 8px;border-radius:3px;border:2px solid ${cor};
+        background:${sel?cor:'transparent'};
+        color:${sel?'#fff':cor};
+        font-size:.62rem;font-weight:700;cursor:pointer;
+        font-family:inherit;transition:all .15s;white-space:nowrap;
+      "
+    >${shortName}</button>`;
+  }).join('');
+}
+
+function toggleHeroPorto(k, idx){
+  if(heroSelectedPortos.has(k)){
+    if(heroSelectedPortos.size<=1) return; // mínimo 1
+    heroSelectedPortos.delete(k);
+  } else {
+    if(heroSelectedPortos.size>=5){ // máximo 5
+      const first = heroSelectedPortos.values().next().value;
+      heroSelectedPortos.delete(first);
+    }
+    heroSelectedPortos.add(k);
+  }
+  buildHeroSelectors();
+  updateHeroChart();
+}
+
+function updateHeroChart(){
+  const ctx = document.getElementById('heroChart');
+  if(!ctx) return;
+  const labels = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+  const datasets = [];
+  let i=0;
+  Object.keys(locacoesTransvidal).forEach((k,idx)=>{
+    if(!heroSelectedPortos.has(k)) return;
+    const cor = CHART_COLORS[idx % CHART_COLORS.length];
+    const rgb = hexToRgb(cor);
+    datasets.push({
+      label: (locacoesTransvidal[k].name||k).split('(')[0].trim()
+               .replace('Porto de ','').replace('Porto do ','')
+               .replace('Hub ','').replace('Silo ','').replace('Estação ',''),
+      data: gerarSeriePara(k),
+      borderColor: cor,
+      backgroundColor: `rgba(${rgb},.07)`,
+      borderWidth:2, fill:true, tension:.4, pointRadius:3
+    });
+    i++;
+  });
+  if(heroChartInst){ heroChartInst.destroy(); heroChartInst=null; }
+  heroChartInst = new Chart(ctx,{
+    type:'line',
+    data:{labels,datasets},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:'#888',font:{size:10},boxWidth:12}}},
+      scales:{
+        x:{ticks:{color:'#999',font:{size:9}},grid:{color:'rgba(0,0,0,.05)'}},
+        y:{ticks:{color:'#999',font:{size:9},callback:v=>v+'h'},grid:{color:'rgba(0,0,0,.05)'}}
+      }
+    }
+  });
+}
+
+function hexToRgb(hex){
+  const r=parseInt(hex.slice(1,3),16);
+  const g=parseInt(hex.slice(3,5),16);
+  const b=parseInt(hex.slice(5,7),16);
+  return `${r},${g},${b}`;
+}
+
+function initHeroChart(){
+  buildHeroMiniPorts();
+  buildHeroSelectors();
+  updateHeroChart();
+}
+
+// ─── MAPA PORTOS (seção cobertura) ────────────────────────────────────────
+let lpMap, lpMkr = {};
+function initLpMap(){
+  lpMap = L.map('lp-map',{zoomControl:true,attributionControl:false}).setView([-14,-50],4);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(lpMap);
+  Object.entries(locacoesTransvidal).forEach(([k,v])=>{
+    const cor = v.type==='porto'?'#D32F2F':'#333333';
+    const m = L.circleMarker([v.lat,v.lon],{radius:9,fillColor:cor,color:'#fff',weight:2,opacity:1,fillOpacity:.9}).addTo(lpMap);
+    m.bindPopup(`<b style="color:#eee">${v.name}</b><br><span style="color:#aaa;font-size:.78rem">${v.type==='porto'?'⚓ Porto Marítimo':'🏭 Hub Interior'}</span>`);
+    lpMkr[k]=m;
+  });
+}
+function buildPortList(){
+  const el = document.getElementById('lp-porto-list');
+  if(!el) return;
+  Object.entries(locacoesTransvidal).forEach(([k,v])=>{
+    const d = document.createElement('div');
+    d.className='pli';
+    d.innerHTML=`<div class="pli-dot"></div><span class="pli-name">${v.name}</span><span class="pli-type ${v.type}">${v.type==='porto'?'Porto':'Hub'}</span>`;
+    d.addEventListener('click',()=>{
+      document.querySelectorAll('.pli').forEach(i=>i.style.borderLeftColor='');
+      d.style.borderLeftColor='var(--transvidal-red)';
+      lpMap.flyTo([v.lat,v.lon],9,{duration:1.1});
+      lpMkr[k].openPopup();
+    });
+    el.appendChild(d);
+  });
+}
+
+// ─── MAPA DEMO DASHBOARD — colorido conforme modelo treinado ─────────────
+let demoMap, demoMkr = {};
+function corDoPorto(k){
+  // Prioridade: dados da API ao vivo; fallback: PREVISOES (modelo treinado)
+  const prev = PREVISOES[k];
+  if(!prev) return '#aaa';  // sem modelo treinado = cinza
+  if(prev.horas>72)  return '#D32F2F'; // VERMELHO (crítico)
+  if(prev.alerta==='VERMELHO') return '#D32F2F';
+  if(prev.horas>36)  return '#f39c12'; // LARANJA/AMARELO
+  return '#27ae60';                    // VERDE (normal)
+}
+function initDemoMap(){
+  demoMap = L.map('demo-map',{zoomControl:true,attributionControl:false}).setView([-14,-50],4);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(demoMap);
+  Object.entries(locacoesTransvidal).forEach(([k,v])=>{
+    const prev = PREVISOES[k];
+    const cor = corDoPorto(k);
+    const treinado = !!MODELOS_REAIS[k];
+    // marcador maior para porto treinado, menor para sem modelo
+    const radius = treinado ? 10 : 6;
+    const opacity = treinado ? 0.92 : 0.45;
+    const m = L.circleMarker([v.lat,v.lon],{
+      radius, fillColor:cor, color:'#fff', weight:2, opacity:1, fillOpacity:opacity
+    }).addTo(demoMap);
+    const mae = MODELOS_REAIS[k] ? `MAE: ${MODELOS_REAIS[k].mae_horas}h` : 'Modelo não treinado';
+    const ht = prev
+      ? `<span style="font-size:1rem;font-weight:700;color:${cor}">${prev.horas}h</span> — ${prev.alerta}<br><span style="font-size:.75rem;color:#aaa">${mae}</span>`
+      : `<span style="color:#aaa;font-size:.8rem">${mae}</span>`;
+    m.bindPopup(`<b style="color:#eee">${v.name}</b><br>${ht}`);
+    demoMkr[k]=m;
+  });
+  // Legenda do mapa
+  const legend = L.control({position:'bottomright'});
+  legend.onAdd = ()=>{
+    const d=L.DomUtil.create('div');
+    d.style.cssText='background:#fff;padding:8px 10px;border-radius:3px;font-size:.72rem;font-family:Roboto,sans-serif;line-height:1.7;box-shadow:0 2px 6px rgba(0,0,0,.15)';
+    d.innerHTML=`
+      <div style="font-weight:700;margin-bottom:4px;color:#333">Status IA</div>
+      <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#D32F2F;margin-right:5px"></span>Crítico (&gt;72h)</div>
+      <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f39c12;margin-right:5px"></span>Atenção (36–72h)</div>
+      <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#27ae60;margin-right:5px"></span>Normal (&lt;36h)</div>
+      <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#aaa;margin-right:5px"></span>Sem modelo</div>
+    `;
+    return d;
+  };
+  legend.addTo(demoMap);
+}
+
+// ─── DASHBOARD EMBED: lista de portos ────────────────────────────────────
+function buildDemoPortos(){
+  const el = document.getElementById('demo-lista-portos');
+  let n=0;
+  Object.entries(locacoesTransvidal).forEach(([k,v])=>{
+    const prev = PREVISOES[k]; if(!prev) return;
+    n++;
+    const h = Math.round(prev.horas+(Math.random()-.5)*4);
+    const sc = h>72?'status-crit':h>36?'status-warn':'status-ok';
+    const tc = prev.tendencia==='up'?'var(--status-crit)':'var(--status-ok)';
+    const ti = prev.tendencia==='up'?'▲':'▼';
+    const pf = perfilOp[k]||{carga:'—',veiculo:'—'};
+    el.innerHTML += `
+      <div class="porto-card ${sc}" onclick="focoDemoPorto('${k}')">
+        <div class="porto-header">
+          <span class="porto-name">${v.name}</span>
+          <span class="wait-time">${h}<span class="wait-unit">h (IA)</span></span>
+        </div>
+        <div class="predicao-info"><span class="trend-icon" style="color:${tc}">${ti}</span> Tendência 24h: ${prev.tendencia==='up'?'Aumento':'Redução'}</div>
+        <div class="perfil-op">
+          <div><span class="perfil-label">Carga:</span> ${pf.carga}</div>
+          <div><span class="perfil-label">Veículo:</span> ${pf.veiculo}</div>
+        </div>
+      </div>`;
+  });
+  document.getElementById('demo-count').textContent = `${n} unidades monitoradas`;
+}
+
+// ─── DASHBOARD EMBED: tabela de modelos ──────────────────────────────────
+function buildDemoModelos(){
+  const linhas = Object.keys(locacoesTransvidal).map(k=>{
+    const m = MODELOS_REAIS[k];
+    const nome = locacoesTransvidal[k].name;
+    const badge = m?`<span class="badge badge-ok">Ativo</span>`:`<span class="badge badge-off">Pendente</span>`;
+    const treino = m?m.treinado_em:'—';
+    const mae = m?`${m.mae_horas.toFixed(2)}h`:'—';
+    const pf = perfilOp[k]||{carga:'—',veiculo:'—'};
+    return `<tr><td><div class="modelo-porto">${nome}</div><div style="font-size:.68rem;color:var(--transvidal-gray-mid)">${k}</div></td><td>${badge}</td><td style="font-size:.73rem">${pf.carga}</td><td>${treino}</td><td class="modelo-mae">${mae}</td></tr>`;
+  }).join('');
+  document.getElementById('demo-lista-modelos').innerHTML=`
+    <table class="modelos-table">
+      <thead><tr><th>Porto / Hub</th><th>Status</th><th>Carga</th><th>Treinado em</th><th>MAE</th></tr></thead>
+      <tbody>${linhas}</tbody>
+    </table>`;
+  document.getElementById('demo-modelos-count').textContent='17/17 treinados';
+}
+
+// ─── ALERTAS IA ───────────────────────────────────────────────────────────
+function buildAlertas(){
+  const el = document.getElementById('demo-alertas-ia');
+  const crit = Object.entries(PREVISOES).filter(([,v])=>v.alerta==='LARANJA'||v.alerta==='VERMELHO');
+  if(!crit.length){el.textContent='Nenhum alerta crítico para as próximas 72 horas.';return;}
+  el.innerHTML = crit.map(([k,v])=>{
+    const cor = v.alerta==='VERMELHO'?'var(--status-crit)':'#e67e22';
+    const em  = v.alerta==='VERMELHO'?'🔴':'🟠';
+    return `<div style="margin-bottom:8px;padding:8px 10px;background:rgba(211,47,47,.06);border-left:3px solid ${cor};border-radius:0 3px 3px 0">
+      <strong style="color:${cor};font-size:.79rem">${em} ${locacoesTransvidal[k].name}</strong>
+      <div style="margin-top:3px;font-size:.76rem">Espera prevista: <strong>${v.horas}h</strong> — risco ${v.risco_pct}%. Reavalie despachos nas próximas 48h.</div>
+    </div>`;
+  }).join('');
+}
+
+function focoDemoPorto(k){
+  if(demoMap&&locacoesTransvidal[k]){
+    demoMap.flyTo([locacoesTransvidal[k].lat,locacoesTransvidal[k].lon],10,{duration:1.2});
+    demoMkr[k].openPopup();
+  }
+}
+
+// ─── TABS ─────────────────────────────────────────────────────────────────
+function initTabs(){
+  document.querySelectorAll('.tab-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const t=btn.dataset.tab;
+      const wrap=btn.closest('.embed-panel')||btn.closest('.panel');
+      wrap.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b===btn));
+      wrap.querySelectorAll('.tab-pane').forEach(p=>p.classList.toggle('active',p.id===t));
+    });
+  });
+}
+
+// ─── FADE-UP ──────────────────────────────────────────────────────────────
+function initFadeUp(){
+  const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('vis');});},{threshold:.08});
+  document.querySelectorAll('.fu').forEach(el=>obs.observe(el));
+}
+
+// ─── STATUS BAR TICK ─────────────────────────────────────────────────────
+function tickStatus(){
+  document.getElementById('demo-api-status').textContent='MODELOS LOCAIS (72h)';
+  document.getElementById('demo-last-update').textContent=new Date().toLocaleTimeString('pt-BR');
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────
+window.addEventListener('load',()=>{
+  initHeroChart();
+  initLpMap();
+  buildPortList();
+  initDemoMap();
+  buildDemoPortos();
+  buildDemoModelos();
+  buildAlertas();
+  initTabs();
+  initFadeUp();
+  tickStatus();
+  setInterval(tickStatus,60000);
+});
+</script>
+</body>
+</html>
